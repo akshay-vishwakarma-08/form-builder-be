@@ -9,6 +9,9 @@ from drf_yasg import openapi
 from django.db import connection
 from django.apps import apps
 from django.core.exceptions import ObjectDoesNotExist, FieldError
+import json
+from django.http import HttpResponse
+from django.views.decorators.csrf import csrf_exempt
 
 
 class GetTablesAPIView(APIView):
@@ -374,3 +377,95 @@ class GetTableDataAPIView(APIView):
                 {"error": f"Error fetching data from {table_name}: {str(e)}"},
                 status=status.HTTP_400_BAD_REQUEST,
             )
+
+
+# SSR Rendering of client form
+
+
+@csrf_exempt
+def export_html(request):
+    if request.method == "POST":
+        data = json.loads(request.body)
+        sections = data.get("sections", [])
+        print("Sections", sections)
+
+        html = generate_html_with_css(sections)
+        response = HttpResponse(html, content_type="text/html")
+        response["Content-Disposition"] = 'attachment; filename="form.html"'
+        return response
+
+    return HttpResponse(status=405)
+
+
+def generate_html_with_css(sections):
+    style = """
+    <style>
+      form {
+        max-width: 800px;
+        margin: auto;
+        padding: 1rem;
+        border: 1px solid #ccc;
+        border-radius: 8px;
+        font-family: Arial, sans-serif;
+      }
+      fieldset {
+        margin-bottom: 2rem;
+        border: 1px solid #ddd;
+        padding: 1rem;
+        border-radius: 5px;
+      }
+      legend {
+        font-weight: bold;
+        padding: 0 10px;
+      }
+      .row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 2rem;
+        margin-bottom: 1rem;
+      }
+      .column {
+        flex: 1;
+        min-width: 200px;
+      }
+      .column label {
+        display: block;
+        font-weight: bold;
+        margin-bottom: 0.3rem;
+      }
+      .column input, .column textarea, .column select {
+        width: 100%;
+        padding: 0.5rem;
+        border: 1px solid #ccc;
+        border-radius: 4px;
+      }
+    </style>
+    """
+
+    def get_field_html(field):
+        config = field.get("config", {})
+        db_column = field.get("db_column_name", "")
+        label = config.get("label", "")
+        placeholder = config.get("placeholder", "")
+        field_type = config.get("field_type", "text")
+        required = "required" if config.get("required") else ""
+
+        if field_type == "textarea":
+            return f"<label>{label}</label><textarea name='{db_column}' placeholder='{placeholder}' {required}></textarea>"
+        else:
+            return f"<label>{label}</label><input type='{field_type}' name='{db_column}' placeholder='{placeholder}' {required} />"
+
+    body = ""
+    for section in sections:
+        body += f"<fieldset><legend>{section['section_name']}</legend>"
+        for row in section["rows"]:
+            body += "<div class='row'>"
+            for col in row["columns"]:
+                body += "<div class='column'>"
+                for field in col["fields"]:
+                    body += get_field_html(field)
+                body += "</div>"
+            body += "</div>"
+        body += "</fieldset>"
+
+    return f"<form>{style}{body}</form>"

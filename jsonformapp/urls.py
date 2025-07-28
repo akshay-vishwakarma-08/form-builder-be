@@ -9,7 +9,9 @@ from .views import (
     DynamicTableRecordView,
     GetEmptyTablesAPIView,
     GetTableDataAPIView,
+    export_html,
 )
+
 
 urlpatterns = [
     path("tables/", GetTablesAPIView.as_view(), name="get-tables"),
@@ -39,4 +41,5 @@ urlpatterns = [
         GetTableDataAPIView.as_view(),
         name="get-table-data",
     ),
+    path("export-html/", export_html, name="export-html"),
 ]
